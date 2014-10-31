@@ -1,0 +1,7 @@
+[package]
+name = "isovati"
+version = "0.0.1"
+authors = [ "Miikka Koskinen <miikka.koskinen@iki.fi>" ]
+
+[[bin]]
+name = "isovati"
