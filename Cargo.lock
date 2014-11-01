@@ -1,0 +1,18 @@
+[root]
+name = "isovati"
+version = "0.0.1"
+dependencies = [
+ "openssl 0.0.0 (git+https://github.com/sfackler/rust-openssl.git)",
+ "toml 0.1.0 (git+https://github.com/alexcrichton/toml-rs)",
+]
+
+[[package]]
+name = "openssl"
+version = "0.0.0"
+source = "git+https://github.com/sfackler/rust-openssl.git#66df9154a6fcc468f91b326a3c2b8e8850d75b19"
+
+[[package]]
+name = "toml"
+version = "0.1.0"
+source = "git+https://github.com/alexcrichton/toml-rs#71d1689d63ef1af41addef330e314a56e88f48a9"
+
