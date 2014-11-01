@@ -1,6 +1,5 @@
 extern crate openssl;
 extern crate toml;
-extern crate collections;
 
 use openssl::ssl::{Tlsv1, SslContext, SslStream};
 use std::io::BufferedStream;
@@ -42,9 +41,6 @@ fn main() {
     let _ = write!(socket, "USER {} 0 * :{}\r\n", user, realname);
     let _ = write!(socket, "PASS {}\r\n", pw);
     let _ = write!(socket, "NICK {}\r\n", nick);
-    let _ = socket.flush();
-
-    let _ = write!(socket, "PRIVMSG #ohjusputka :tutturuu\r\n");
     let _ = socket.flush();
 
     println!("Receiving now.");
