@@ -24,6 +24,30 @@ fn slurp_config(path: &str) -> Value {
     }
 }
 
+#[deriving(Show)]
+enum Message {
+    // XXX(miikka) Does it make sense to use String instead of &str? I do not
+    // understand Rust well enough to tell.
+    Privmsg(String, String, String),
+    Other(String),
+}
+
+fn parse_message(msg: String) -> Message {
+    // IRC messages are supposed to be separated by CRLF. Drop it.
+    let msg_slice = msg.as_slice().slice_to(msg.len()-2);
+    let parts: Vec<&str> = msg_slice.split(' ').collect();
+    match parts[1] {
+        "PRIVMSG" => {
+            let mut body = parts.as_slice().slice(3, parts.len()).connect(" ");
+            let _ = body.remove(0); // drop the initial :
+            return Privmsg(String::from_str(parts[0]),
+                           String::from_str(parts[2]),
+                           body);
+        },
+        _ => return Other(String::from_str(msg_slice)),
+    }
+}
+
 fn main() {
     let config = slurp_config("config.toml");
     let server = config.lookup("irc.server").unwrap().as_str().unwrap();
@@ -46,6 +70,7 @@ fn main() {
     println!("Receiving now.");
 
     for line in socket.lines() {
-        print!("{}", line.ok().unwrap());
+        let msg = parse_message(line.ok().unwrap());
+        println!("{}", msg);
     }
 }
