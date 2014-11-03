@@ -7,6 +7,8 @@ use std::io::TcpStream;
 use std::io::File;
 use toml::{Table, Value};
 
+type IrcStream = BufferedStream<SslStream<TcpStream>>;
+
 fn slurp_config(path: &str) -> Value {
     let config_text = File::open(&Path::new(path)).read_to_string().unwrap();
     let mut parser = toml::Parser::new(config_text.as_slice());
@@ -48,6 +50,41 @@ fn parse_message(msg: String) -> Message {
     }
 }
 
+fn nick_of(usermask: &String) -> &str {
+    let parts: Vec<&str> = usermask.as_slice().split('!').collect();
+    let nick = parts[0];
+    if nick.starts_with(":") {
+        return nick.slice_from(1);
+    } else {
+        return nick;
+    }
+}
+
+fn return_chan<'r>(from: &'r String, to: &'r String) -> &'r str {
+    if to.as_slice().starts_with("#") {
+        return to.as_slice();
+    } else {
+        return nick_of(from);
+    }
+}
+
+fn handle_command(irc: &mut IrcStream, msg: Message) {
+    match msg {
+        Privmsg(from, to, body) => {
+            let parts: Vec<&str> = body.as_slice().split(' ').collect();
+            match parts[0] {
+                "^echo" => {
+                    let rest = parts.as_slice().slice_from(1).connect(" ");
+                    let _ = write!(irc, "PRIVMSG {} :{}\r\n", return_chan(&from, &to), rest);
+                    let _ = irc.flush();
+                },
+                _ => return,
+            }
+        },
+        _ => return,
+    }
+}
+
 fn main() {
     let config = slurp_config("config.toml");
     let server = config.lookup("irc.server").unwrap().as_str().unwrap();
@@ -69,8 +106,10 @@ fn main() {
 
     println!("Receiving now.");
 
-    for line in socket.lines() {
+    loop {
+        let line = socket.read_line();
         let msg = parse_message(line.ok().unwrap());
         println!("{}", msg);
+        handle_command(&mut socket, msg);
     }
 }
