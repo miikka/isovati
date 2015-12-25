@@ -1,14 +1,17 @@
 extern crate bufstream;
 extern crate openssl;
+extern crate rand;
 extern crate toml;
 
 use std::fs::File;
 use std::io::prelude::*;
+use std::io::BufReader;
 use std::net::TcpStream;
 use std::path::Path;
 
 use bufstream::BufStream;
 use openssl::ssl::{SslContext, SslMethod, SslStream};
+use rand::Rng;
 use toml::Value;
 
 type IrcStream = BufStream<SslStream<TcpStream>>;
@@ -49,7 +52,7 @@ fn parse_message(msg: String) -> Message {
     let parts: Vec<&str> = msg_slice.split(' ').collect();
     match parts[1] {
         "PRIVMSG" => {
-            let mut body = parts[3..].connect(" ");
+            let mut body = parts[3..].join(" ");
             let _ = body.remove(0); // drop the initial :
             return Privmsg(String::from(parts[0]),
                            String::from(parts[2]),
@@ -77,21 +80,43 @@ fn return_chan<'r>(from: &'r String, to: &'r String) -> &'r str {
     }
 }
 
-fn handle_command(irc: &mut IrcStream, msg: Message) {
+fn handle_command(irc: &mut IrcStream, msg: Message, turhakkeet: &Vec<String>) {
+    let mut rng = rand::thread_rng();
+
     match msg {
         Privmsg(from, to, body) => {
             let parts: Vec<&str> = body[..].split(' ').collect();
             match parts[0] {
                 "^echo" => {
-                    let rest = parts[1..].connect(" ");
+                    let rest = parts[1..].join(" ");
                     let _ = write!(irc, "PRIVMSG {} :{}\r\n", return_chan(&from, &to), rest);
                     let _ = irc.flush();
+                },
+                "^hp" => {
+                    if parts[1] == "turhake" {
+                        let t = rng.choose(turhakkeet).unwrap();
+                        let chars: Vec<char> = t.chars().collect();
+                        let c = rng.choose(&chars).unwrap();
+                        let _ = write!(irc, "PRIVMSG Putkamon :#ohjusputka:hp \"{}\" {} \"se turhake\"\r\n", t, c);
+                        let _ = irc.flush();
+                    }
                 },
                 _ => return,
             }
         },
         _ => return,
     }
+}
+
+fn read_list(path: &str) -> Vec<String> {
+    let f = File::open(&Path::new(path)).unwrap();
+    let file = BufReader::new(&f);
+    let mut lines = Vec::new();
+    for line in file.lines() {
+        let l = line.unwrap();
+        lines.push(l.clone());
+    }
+    return lines;
 }
 
 fn main() {
@@ -102,6 +127,8 @@ fn main() {
     let nick = config.lookup("irc.nick").unwrap().as_str().unwrap();
     let realname = config.lookup("irc.realname").unwrap().as_str().unwrap();
     let user = config.lookup("irc.username").unwrap().as_str().unwrap();
+
+    let turhakkeet = read_list("turhakkeet.txt");
 
     let raw_socket = TcpStream::connect((server, port as u16)).unwrap();
     let ssl_ctx = SslContext::new(SslMethod::Tlsv1).unwrap();
@@ -120,6 +147,6 @@ fn main() {
         let _ = socket.read_line(&mut line);
         let msg = parse_message(line);
         println!("{:?}", msg);
-        handle_command(&mut socket, msg);
+        handle_command(&mut socket, msg, &turhakkeet);
     }
 }
