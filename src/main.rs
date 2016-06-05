@@ -6,15 +6,13 @@ extern crate toml;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
-use std::net::TcpStream;
 use std::path::Path;
 
-use bufstream::BufStream;
-use openssl::ssl::{SslContext, SslMethod, SslStream};
 use rand::Rng;
 use toml::Value;
 
-type IrcStream = BufStream<SslStream<TcpStream>>;
+#[macro_use]
+mod irc;
 
 fn slurp_config(path: &str) -> Value {
     let mut config_file = File::open(&Path::new(path)).unwrap();
@@ -80,7 +78,7 @@ fn return_chan<'r>(from: &'r String, to: &'r String) -> &'r str {
     }
 }
 
-fn handle_command(irc: &mut IrcStream, msg: Message, turhakkeet: &Vec<String>) {
+fn handle_command(irc: &mut irc::Irc, msg: Message, turhakkeet: &Vec<String>) {
     let mut rng = rand::thread_rng();
 
     match msg {
@@ -89,7 +87,7 @@ fn handle_command(irc: &mut IrcStream, msg: Message, turhakkeet: &Vec<String>) {
             match parts[0] {
                 "^echo" => {
                     let rest = parts[1..].join(" ");
-                    let _ = write!(irc, "PRIVMSG {} :{}\r\n", return_chan(&from, &to), rest);
+                    let _ = send!(irc, "PRIVMSG {} :{}\r\n", return_chan(&from, &to), rest);
                     let _ = irc.flush();
                 },
                 "^hp" => {
@@ -97,7 +95,7 @@ fn handle_command(irc: &mut IrcStream, msg: Message, turhakkeet: &Vec<String>) {
                         let t = rng.choose(turhakkeet).unwrap();
                         let chars: Vec<char> = t.chars().collect();
                         let c = rng.choose(&chars).unwrap();
-                        let _ = write!(irc, "PRIVMSG Putkamon :#ohjusputka:hp \"{}\" {} \"se turhake\"\r\n", t, c);
+                        let _ = send!(irc, "PRIVMSG Putkamon :#ohjusputka:hp \"{}\" {} \"se turhake\"\r\n", t, c);
                         let _ = irc.flush();
                     }
                 },
@@ -135,32 +133,28 @@ fn main() {
     let user = config.lookup("irc.username").unwrap().as_str().unwrap();
 
     let autojoin = get_channels(&config, "irc.autojoin");
-
     let turhakkeet = read_list("turhakkeet.txt");
 
-    let raw_socket = TcpStream::connect((server, port as u16)).unwrap();
-    let ssl_ctx = SslContext::new(SslMethod::Tlsv1).unwrap();
-    let unbuf_socket = SslStream::connect(&ssl_ctx, raw_socket).unwrap();
-    let mut socket = BufStream::new(unbuf_socket);
-
-    let _ = write!(socket, "USER {} 0 * :{}\r\n", user, realname);
-    let _ = write!(socket, "PASS {}\r\n", pw);
-    let _ = write!(socket, "NICK {}\r\n", nick);
+    let irc_config = irc::Config {
+        server: server, port: port as u16, username: user, password: pw,
+        nick: nick, realname: realname
+    };
+    let mut irc_handle = irc::connect_ssl(irc_config);
 
     for channel in autojoin {
-        let _ = write!(socket, "JOIN {}\r\n", channel);
+        let _ = send!(irc_handle, "JOIN {}\r\n", channel);
     }
 
-    let _ = socket.flush();
+    irc_handle.flush();
 
     println!("Receiving now.");
 
     loop {
         let mut line = String::new();
-        let _ = socket.read_line(&mut line);
+        let _ = irc_handle.read_line(&mut line);
         let msg = parse_message(line);
         println!("{:?}", msg);
-        handle_command(&mut socket, msg, &turhakkeet);
+        handle_command(&mut irc_handle, msg, &turhakkeet);
     }
 }
 
