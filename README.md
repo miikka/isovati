@@ -1,11 +1,14 @@
 # isovati
 
-**isovati** is a simple IRC bot. It's written in Rust.
+**isovati** is a sketch of an IRC bot by [Miikka Koskinen](http://miikka.me/).
+It's written in Rust.
+
 
 ## Building and running
 
-    cargo build
-    ./target/isovati
+    cargo test   # run unit tests
+    cargo run    # run the IRC bot
+
 
 ## Configuration
 
