@@ -119,6 +119,12 @@ fn read_list(path: &str) -> Vec<String> {
     return lines;
 }
 
+pub fn get_channels<'r>(config: &'r toml::Value, key: &'r str) -> Vec<&'r str> {
+    let slice = config.lookup(key).and_then(|x| x.as_slice());
+    let channels = slice.and_then(|x| x.iter().map(|c| c.as_str()).collect());
+    return channels.unwrap_or(Vec::new());
+}
+
 fn main() {
     let config = slurp_config("config.toml");
     let server = config.lookup("irc.server").unwrap().as_str().unwrap();
@@ -127,6 +133,8 @@ fn main() {
     let nick = config.lookup("irc.nick").unwrap().as_str().unwrap();
     let realname = config.lookup("irc.realname").unwrap().as_str().unwrap();
     let user = config.lookup("irc.username").unwrap().as_str().unwrap();
+
+    let autojoin = get_channels(&config, "irc.autojoin");
 
     let turhakkeet = read_list("turhakkeet.txt");
 
@@ -138,6 +146,11 @@ fn main() {
     let _ = write!(socket, "USER {} 0 * :{}\r\n", user, realname);
     let _ = write!(socket, "PASS {}\r\n", pw);
     let _ = write!(socket, "NICK {}\r\n", nick);
+
+    for channel in autojoin {
+        let _ = write!(socket, "JOIN {}\r\n", channel);
+    }
+
     let _ = socket.flush();
 
     println!("Receiving now.");
@@ -148,5 +161,20 @@ fn main() {
         let msg = parse_message(line);
         println!("{:?}", msg);
         handle_command(&mut socket, msg, &turhakkeet);
+    }
+}
+
+mod test {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use toml;
+
+    #[test]
+    fn test_get_channels() {
+        let mut parser = toml::Parser::new("[irc]\nautojoin = [\"#a\", \"#b\"]");
+        let config = parser.parse().map(|x| toml::Value::Table(x)).unwrap();
+        assert!(get_channels(&config, "irc.does_not_exist").is_empty());
+        assert_eq!(get_channels(&config, "irc.autojoin"), ["#a", "#b"]);
     }
 }
