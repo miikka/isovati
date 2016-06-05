@@ -140,7 +140,7 @@ fn main() {
 
     let raw_socket = TcpStream::connect((server, port as u16)).unwrap();
     let ssl_ctx = SslContext::new(SslMethod::Tlsv1).unwrap();
-    let unbuf_socket = SslStream::new(&ssl_ctx, raw_socket).unwrap();
+    let unbuf_socket = SslStream::connect(&ssl_ctx, raw_socket).unwrap();
     let mut socket = BufStream::new(unbuf_socket);
 
     let _ = write!(socket, "USER {} 0 * :{}\r\n", user, realname);
