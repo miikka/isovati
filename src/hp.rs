@@ -37,6 +37,10 @@ pub fn init<'r>(name: &'r str, path: &str) -> HP<'r> {
     return HP { name: name, words: words, rng: rand::thread_rng() };
 }
 
+// The idea: HP.execute takes the incoming command and produces a vector of
+// internal commands, which are executed with Command.execute.
+// XXX(miikka) This naming might require some work. Two commands, two executes?
+
 impl<'r> HP<'r> {
     fn pick_word(&mut self) -> (&String, char) {
         let word = self.rng.choose(&self.words).unwrap();
@@ -69,7 +73,6 @@ impl Command {
         }
     }
 }
-
 
 mod test {
     #[allow(unused_imports)]
