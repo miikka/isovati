@@ -5,14 +5,13 @@ extern crate toml;
 
 use std::fs::File;
 use std::io::prelude::*;
-use std::io::BufReader;
 use std::path::Path;
 
-use rand::Rng;
 use toml::Value;
 
 #[macro_use]
 mod irc;
+mod hp;
 
 fn slurp_config(path: &str) -> Value {
     let mut config_file = File::open(&Path::new(path)).unwrap();
@@ -78,9 +77,7 @@ fn return_chan<'r>(from: &'r String, to: &'r String) -> &'r str {
     }
 }
 
-fn handle_command(irc: &mut irc::Irc, msg: Message, turhakkeet: &Vec<String>) {
-    let mut rng = rand::thread_rng();
-
+fn handle_command(irc: &mut irc::Irc, msg: Message, hp: &mut hp::HP) {
     match msg {
         Privmsg(from, to, body) => {
             let parts: Vec<&str> = body[..].split(' ').collect();
@@ -91,30 +88,17 @@ fn handle_command(irc: &mut irc::Irc, msg: Message, turhakkeet: &Vec<String>) {
                     let _ = irc.flush();
                 },
                 "^hp" => {
-                    if parts[1] == "turhake" {
-                        let t = rng.choose(turhakkeet).unwrap();
-                        let chars: Vec<char> = t.chars().collect();
-                        let c = rng.choose(&chars).unwrap();
-                        let _ = send!(irc, "PRIVMSG Putkamon :#ohjusputka:hp \"{}\" {} \"se turhake\"\r\n", t, c);
-                        let _ = irc.flush();
+                    let commands = hp.execute(&parts[1 ..]);
+                    for command in commands {
+                        command.execute(irc);
                     }
+                    let _ = irc.flush();
                 },
                 _ => return,
             }
         },
         _ => return,
     }
-}
-
-fn read_list(path: &str) -> Vec<String> {
-    let f = File::open(&Path::new(path)).unwrap();
-    let file = BufReader::new(&f);
-    let mut lines = Vec::new();
-    for line in file.lines() {
-        let l = line.unwrap();
-        lines.push(l.clone());
-    }
-    return lines;
 }
 
 pub fn get_channels<'r>(config: &'r toml::Value, key: &'r str) -> Vec<&'r str> {
@@ -133,7 +117,7 @@ fn main() {
     let user = config.lookup("irc.username").unwrap().as_str().unwrap();
 
     let autojoin = get_channels(&config, "irc.autojoin");
-    let turhakkeet = read_list("turhakkeet.txt");
+    let mut hp = hp::init("turhake", "turhakkeet.txt");
 
     let irc_config = irc::Config {
         server: server, port: port as u16, username: user, password: pw,
@@ -154,7 +138,7 @@ fn main() {
         let _ = irc_handle.read_line(&mut line);
         let msg = parse_message(line);
         println!("{:?}", msg);
-        handle_command(&mut irc_handle, msg, &turhakkeet);
+        handle_command(&mut irc_handle, msg, &mut hp);
     }
 }
 
