@@ -3,45 +3,16 @@ extern crate openssl;
 extern crate rand;
 extern crate toml;
 
-use std::fs::File;
 use std::io::prelude::*;
-use std::path::Path;
-
-use toml::Value;
 
 #[macro_use]
 mod irc;
 mod hp;
+mod automode;
+mod util;
 
-fn slurp_config(path: &str) -> Value {
-    let mut config_file = File::open(&Path::new(path)).unwrap();
-    let mut config_text = String::new();
-    let _ = config_file.read_to_string(&mut config_text);
-
-    let mut parser = toml::Parser::new(&config_text[..]);
-    match parser.parse() {
-        Some(value) => return Value::Table(value),
-        None => {
-            println!("Parsing {} failed.", path);
-            for error in parser.errors.iter() {
-                let (ll, lc) = parser.to_linecol(error.lo);
-                let (hl, hc) = parser.to_linecol(error.hi);
-                println!("{}({}:{}-{}:{}): {}", path, ll+1, lc+1, hl+1, hc+1, error.desc);
-            }
-            panic!("Parsing config failed.");
-        },
-    }
-}
-
-#[derive(Debug)]
-enum Message {
-    // XXX(miikka) Does it make sense to use String instead of &str? I do not
-    // understand Rust well enough to tell.
-    Privmsg(String, String, String),
-    Other(String),
-}
-
-use Message::*;
+use irc::Message;
+use irc::Message::*;
 
 fn parse_message(msg: String) -> Message {
     // IRC messages are supposed to be separated by CRLF. Drop it.
@@ -55,17 +26,13 @@ fn parse_message(msg: String) -> Message {
                            String::from(parts[2]),
                            body.clone());
         },
+        "JOIN" => {
+            return Join {
+                user: parts[0][1..].to_string(),
+                channel: parts[2][1..].to_string()
+            }
+        },
         _ => return Other(String::from(msg_slice)),
-    }
-}
-
-fn nick_of(usermask: &String) -> &str {
-    let parts: Vec<&str> = usermask[..].split('!').collect();
-    let nick = parts[0];
-    if nick.starts_with(":") {
-        return &nick[1..];
-    } else {
-        return nick;
     }
 }
 
@@ -73,11 +40,12 @@ fn return_chan<'r>(from: &'r String, to: &'r String) -> &'r str {
     if to[..].starts_with("#") {
         return &to[..];
     } else {
-        return nick_of(from);
+        return util::nick_of(from);
     }
 }
 
-fn handle_command(irc: &mut irc::Irc, msg: Message, hp: &mut hp::HP) {
+fn handle_command(irc: &mut irc::Irc, msg: Message, hp: &mut hp::HP,
+                  automode: &automode::Automode) {
     match msg {
         Privmsg(from, to, body) => {
             let parts: Vec<&str> = body[..].split(' ').collect();
@@ -85,32 +53,31 @@ fn handle_command(irc: &mut irc::Irc, msg: Message, hp: &mut hp::HP) {
                 "^echo" => {
                     let rest = parts[1..].join(" ");
                     let _ = send!(irc, "PRIVMSG {} :{}\r\n", return_chan(&from, &to), rest);
-                    let _ = irc.flush();
                 },
                 "^hp" => {
                     let commands = hp.execute(&parts[1 ..]);
                     for command in commands {
                         command.execute(irc);
                     }
-                    let _ = irc.flush();
                 },
                 _ => return,
             }
         },
+        Join { ref user, ref channel } => {
+            let commands = automode.execute(msg.clone());
+            for command in commands {
+                command.execute(irc);
+            }
+        }
         _ => return,
     }
-}
-
-pub fn get_channels<'r>(config: &'r toml::Value, key: &'r str) -> Vec<&'r str> {
-    let slice = config.lookup(key).and_then(|x| x.as_slice());
-    let channels = slice.and_then(|x| x.iter().map(|c| c.as_str()).collect());
-    return channels.unwrap_or(Vec::new());
+    let _ = irc.flush();
 }
 
 fn main() {
     let config_path = "config.toml";
     println!("Loading configuration from {}.", config_path);
-    let config = slurp_config(config_path);
+    let config = util::slurp_config(config_path);
 
     let server = config.lookup("irc.server").unwrap().as_str().unwrap();
     let port = config.lookup("irc.port").unwrap().as_integer().unwrap();
@@ -119,7 +86,8 @@ fn main() {
     let realname = config.lookup("irc.realname").unwrap().as_str().unwrap();
     let user = config.lookup("irc.username").unwrap().as_str().unwrap();
 
-    let autojoin = get_channels(&config, "irc.autojoin");
+    let autojoin = util::get_strings(&config, "irc.autojoin");
+    let automode = automode::init("conf/automode.toml");
     let mut hp = hp::init("turhake", "turhakkeet.txt");
 
     let irc_config = irc::Config {
@@ -141,21 +109,6 @@ fn main() {
         let _ = irc_handle.read_line(&mut line);
         let msg = parse_message(line);
         println!("{:?}", msg);
-        handle_command(&mut irc_handle, msg, &mut hp);
-    }
-}
-
-mod test {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use toml;
-
-    #[test]
-    fn test_get_channels() {
-        let mut parser = toml::Parser::new("[irc]\nautojoin = [\"#a\", \"#b\"]");
-        let config = parser.parse().map(|x| toml::Value::Table(x)).unwrap();
-        assert!(get_channels(&config, "irc.does_not_exist").is_empty());
-        assert_eq!(get_channels(&config, "irc.autojoin"), ["#a", "#b"]);
+        handle_command(&mut irc_handle, msg, &mut hp, &automode);
     }
 }

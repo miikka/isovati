@@ -10,6 +10,18 @@ use openssl::ssl::{SslContext, SslMethod, SslStream};
 pub type IrcStream = BufStream<SslStream<TcpStream>>;
 pub struct Irc(IrcStream);
 
+#[derive(Debug, Clone)]
+pub enum Message {
+    // XXX(miikka) Does it make sense to use String instead of &str? I do not
+    // understand Rust well enough to tell.
+    // XXX(miikka) Looking at automode code, String seems silly - there are
+    // .to_string() calls everywhere. I *think* I should go back to &str once I
+    // figure out how to handle the ownership.
+    Privmsg(String, String, String),
+    Join { user: String, channel: String },
+    Other(String),
+}
+
 impl Irc {
     pub fn read_line(&mut self, mut line: &mut String) {
         let &mut Irc(ref mut socket) = self;
