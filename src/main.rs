@@ -109,8 +109,8 @@ pub fn get_channels<'r>(config: &'r toml::Value, key: &'r str) -> Vec<&'r str> {
 
 fn main() {
     let config_path = "config.toml";
-    println!("Loading configuration from {}.", config_path)
-    let config = slurp_config("config.toml", config_path);
+    println!("Loading configuration from {}.", config_path);
+    let config = slurp_config(config_path);
 
     let server = config.lookup("irc.server").unwrap().as_str().unwrap();
     let port = config.lookup("irc.port").unwrap().as_integer().unwrap();
