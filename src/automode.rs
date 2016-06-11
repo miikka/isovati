@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::io::prelude::*;
 
-#[macro_use]
 use irc;
 use irc::Message;
 use util;
@@ -66,9 +65,9 @@ impl Command {
     }
 }
 
-mod test {
+#[cfg(test)]
+mod tests {
     use std::collections::HashMap;
-    use irc;
     use irc::Message::*;
 
     use super::*;
@@ -79,13 +78,10 @@ mod test {
         mode_map.insert(("#test".to_string(), "tester".to_string()), Mode::Op);
 
         let am = Automode { mode_map: mode_map };
-        assert!(am.execute(Join{ user: "none".to_string(),
-                                 channel: "#test".to_string() }).is_empty());
-        assert!(am.execute(Join{ user: "tester".to_string(),
-                                 channel: "#none".to_string()}).is_empty());
+        assert!(am.execute(Join{ user: "none", channel: "#test" }).is_empty());
+        assert!(am.execute(Join{ user: "tester", channel: "#none"}).is_empty());
 
-        let commands = am.execute(Join{ user: "tester".to_string(),
-                                        channel: "#test".to_string() });
+        let commands = am.execute(Join{ user: "tester", channel: "#test" });
         match commands[0] {
             Command::ModeUser { ref user, mode, ref channel } => {
                 assert_eq!(user, "tester");
@@ -99,10 +95,10 @@ mod test {
     fn test_init() {
         let am = init("fixtures/test_modes.toml");
         assert!(!am.execute(Join{
-            user: "test!test@example.com".to_string(), channel: "#test".to_string()
+            user: "test!test@example.com", channel: "#test"
         }).is_empty());
         assert!(am.execute(Join{
-            user: "fail!test@example.com".to_string(), channel: "#test".to_string()
+            user: "fail!test@example.com", channel: "#test"
         }).is_empty())
     }
 }

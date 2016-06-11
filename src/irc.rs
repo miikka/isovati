@@ -10,17 +10,15 @@ use openssl::ssl::{SslContext, SslMethod, SslStream};
 pub type IrcStream = BufStream<SslStream<TcpStream>>;
 pub struct Irc(IrcStream);
 
-#[derive(Debug, Clone)]
-pub enum Message {
-    // XXX(miikka) Does it make sense to use String instead of &str? I do not
-    // understand Rust well enough to tell.
-    // XXX(miikka) Looking at automode code, String seems silly - there are
-    // .to_string() calls everywhere. I *think* I should go back to &str once I
-    // figure out how to handle the ownership.
-    Privmsg(String, String, String),
-    Join { user: String, channel: String },
-    Other(String),
+#[derive(Debug, PartialEq)]
+pub enum Message<'r> {
+    Privmsg(&'r str, &'r str, &'r str),
+    Join { user: &'r str, channel: &'r str },
+    Ping(&'r str),
+    Other(&'r str),
 }
+
+use self::Message::*;
 
 impl Irc {
     pub fn read_line(&mut self, mut line: &mut String) {
@@ -67,4 +65,39 @@ pub fn connect_ssl(config: Config) -> Irc {
 #[macro_export]
 macro_rules! send {
     ( $irc:expr, $($x:tt)* ) => (write!($irc.get_stream(), $($x)*));
+}
+
+pub fn parse_message(msg: &str) -> Message {
+    // IRC messages are supposed to be separated by CRLF. Drop it.
+    let msg_slice = &msg[0 .. (msg.len()-2)];
+    let parts: Vec<&str> = msg_slice.split(' ').collect();
+    if parts[0] == "PING" { return Ping(&msg_slice[6..]); }
+    match parts[1] {
+        "PRIVMSG" => {
+            // Three spaces and a : makes 4 characters.
+            let start = parts[0..3].iter()
+                .map(|x| x.len()).fold(0, |sum, x| sum + x) + 4;
+            return Privmsg(parts[0], parts[2], &msg_slice[start..]);
+        },
+        "JOIN" => {
+            return Join {
+                user: &parts[0][1..],
+                channel: &parts[2][1..],
+            }
+        },
+        _ => return Other(&msg_slice),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use super::Message::*;
+
+    #[test]
+    fn test_parse_message() {
+        assert_eq!(parse_message(":test!test@test PRIVMSG #test :Hello world!\r\n"),
+                   Privmsg(":test!test@test", "#test", "Hello world!"));
+        assert_eq!(parse_message("PING :hello world\r\n"), Ping("hello world"));
+    }
 }

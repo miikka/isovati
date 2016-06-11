@@ -14,31 +14,9 @@ mod util;
 use irc::Message;
 use irc::Message::*;
 
-fn parse_message(msg: String) -> Message {
-    // IRC messages are supposed to be separated by CRLF. Drop it.
-    let msg_slice = &msg[0 .. (msg.len()-2)];
-    let parts: Vec<&str> = msg_slice.split(' ').collect();
-    match parts[1] {
-        "PRIVMSG" => {
-            let mut body = parts[3..].join(" ");
-            let _ = body.remove(0); // drop the initial :
-            return Privmsg(String::from(parts[0]),
-                           String::from(parts[2]),
-                           body.clone());
-        },
-        "JOIN" => {
-            return Join {
-                user: parts[0][1..].to_string(),
-                channel: parts[2][1..].to_string()
-            }
-        },
-        _ => return Other(String::from(msg_slice)),
-    }
-}
-
-fn return_chan<'r>(from: &'r String, to: &'r String) -> &'r str {
+fn return_chan<'r>(from: &'r str, to: &'r str) -> &'r str {
     if to[..].starts_with("#") {
-        return &to[..];
+        return to;
     } else {
         return util::nick_of(from);
     }
@@ -52,7 +30,7 @@ fn handle_command(irc: &mut irc::Irc, msg: Message, hp: &mut hp::HP,
             match parts[0] {
                 "^echo" => {
                     let rest = parts[1..].join(" ");
-                    let _ = send!(irc, "PRIVMSG {} :{}\r\n", return_chan(&from, &to), rest);
+                    let _ = send!(irc, "PRIVMSG {} :{}\r\n", return_chan(from, to), rest);
                 },
                 "^hp" => {
                     let commands = hp.execute(&parts[1 ..]);
@@ -63,12 +41,15 @@ fn handle_command(irc: &mut irc::Irc, msg: Message, hp: &mut hp::HP,
                 _ => return,
             }
         },
-        Join { ref user, ref channel } => {
-            let commands = automode.execute(msg.clone());
+        Join { .. } => {
+            let commands = automode.execute(msg);
             for command in commands {
                 command.execute(irc);
             }
-        }
+        },
+        Ping(identifier) => {
+            let _ = send!(irc, "PONG :{}\r\n", identifier);
+        },
         _ => return,
     }
     let _ = irc.flush();
@@ -107,7 +88,7 @@ fn main() {
     loop {
         let mut line = String::new();
         let _ = irc_handle.read_line(&mut line);
-        let msg = parse_message(line);
+        let msg = irc::parse_message(&line[..]);
         println!("{:?}", msg);
         handle_command(&mut irc_handle, msg, &mut hp, &automode);
     }

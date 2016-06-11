@@ -32,8 +32,8 @@ pub fn get_strings<'r>(config: &'r toml::Value, key: &'r str) -> Vec<&'r str> {
     return strings.unwrap_or(Vec::new());
 }
 
-pub fn nick_of(usermask: &String) -> &str {
-    let parts: Vec<&str> = usermask[..].split('!').collect();
+pub fn nick_of(usermask: &str) -> &str {
+    let parts: Vec<&str> = usermask.split('!').collect();
     let nick = parts[0];
     if nick.starts_with(":") {
         return &nick[1..];
@@ -42,10 +42,9 @@ pub fn nick_of(usermask: &String) -> &str {
     }
 }
 
-mod test {
-    #[allow(unused_imports)]
+#[cfg(test)]
+mod tests {
     use super::*;
-    #[allow(unused_imports)]
     use toml;
 
     #[test]

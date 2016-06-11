@@ -74,10 +74,9 @@ impl Command {
     }
 }
 
-mod test {
-    #[allow(unused_imports)]
+#[cfg(test)]
+mod tests {
     use super::*;
-    #[allow(unused_imports)]
     use rand;
 
     #[test]
